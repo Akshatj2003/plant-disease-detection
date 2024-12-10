@@ -1,4 +1,3 @@
-# Import Libraries
 import numpy as np
 import os
 from os import listdir
@@ -10,6 +9,7 @@ from keras.utils import to_categorical
 from keras.preprocessing.image import img_to_array
 import cv2
 from PIL import Image
+import gdown
 
 # Data Loading and Preprocessing
 def convert_image_to_array(image_dir):
@@ -19,13 +19,25 @@ def convert_image_to_array(image_dir):
             image = cv2.resize(image, (256, 256))
             return img_to_array(image)
         else:
-            return np.array([])
+            return np.array([])  # Empty array in case of error
     except Exception as e:
         print(f"Error: {e}")
         return None
 
+# Download dataset from Google Drive
+def download_data():
+    # Replace with your dataset folder IDs
+    folder_ids = [
+        "1x_6Ksz-FdFcsmnRKnrUEQEv6hEFMiWrb",  # Folder 1 ID
+        "1CSaoJ-iONMXEBPS5J8DBLQUAHa0Ud9xM",  # Folder 2 ID
+        "1LIo8adY1KimV0BNCwVZlqOS-Xz1frVV5",  # Folder 3 ID
+    ]
+    for folder_id in folder_ids:
+        url = f"https://drive.google.com/uc?export=download&id={folder_id}"
+        gdown.download(url, quiet=False)
+
 # Directory and Labels
-dir = r"path_to_dataset"  # Replace with your dataset path
+dir = r"your_local_dataset_path"  # Replace with your local dataset path or integrate with gdrive
 root_dir = listdir(dir)
 all_labels = ['Corn-Common_rust', 'Potato-Early_blight', 'Tomato-Bacterial_spot']
 binary_labels = [0, 1, 2]
@@ -38,8 +50,10 @@ for directory in root_dir:
     temp += 1
     for files in plant_image_list:
         image_path = f"{dir}/{directory}/{files}"
-        image_list.append(convert_image_to_array(image_path))
-        label_list.append(binary_labels[temp])
+        image_array = convert_image_to_array(image_path)
+        if image_array is not None:
+            image_list.append(image_array)
+            label_list.append(binary_labels[temp])
 
 # Convert Data to Arrays
 image_list = np.array(image_list, dtype=np.float16) / 255.0  # Normalize pixel values
