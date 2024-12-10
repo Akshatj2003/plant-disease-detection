@@ -1,73 +1,74 @@
 import streamlit as st
-import os
-import cv2
 import numpy as np
-from keras.models import load_model
-from tensorflow.keras.preprocessing.image import img_to_array
+import tensorflow as tf
+from tensorflow.keras.models import load_model
+from tensorflow.keras.preprocessing import image
+import os
 import requests
 from io import BytesIO
 from PIL import Image
+import gdown
 
-# Function to download file from Google Drive
+# Function to download model from Google Drive (if not already present)
 def download_file_from_google_drive(file_id, destination):
-    URL = f"https://drive.google.com/uc?export=download&id={file_id}"
-    response = requests.get(URL)
-    with open(destination, 'wb') as f:
-        f.write(response.content)
+    URL = f'https://drive.google.com/uc?id={file_id}'
+    r = requests.get(URL, stream=True)
+    if r.status_code == 200:
+        with open(destination, 'wb') as f:
+            for chunk in r.iter_content(1024):
+                f.write(chunk)
+    else:
+        print(f"Failed to download file: {r.status_code}")
 
-# Function to download dataset (using Google Drive links)
-def download_datasets():
-    dataset_links = [
-        "1x_6Ksz-FdFcsmnRKnrUEQEv6hEFMiWrb",  # Dataset 1
-        "1CSaoJ-iONMXEBPS5J8DBLQUAHa0Ud9xM",  # Dataset 2
-        "1LIo8adY1KimV0BNCwVZlqOS-Xz1frVV5"   # Dataset 3
-    ]
-    # For each link, download the dataset (assuming it's a folder, download files manually or use API)
-    # You might need to manually download and place them in the app directory or process them via Google API.
+# Mount Google Drive if working locally in Colab
+from google.colab import drive
+drive.mount('/content/drive')
 
-# Load the model
+# Use Google Drive Path for loading datasets
+dataset_path = '/content/drive/MyDrive/plant-disease-detection'
+
+# Replace these with your actual file ids from Google Drive
+model_file_id = 'your_model_file_id_here'
+
+# Download model if not already present in the folder
+if not os.path.exists("plant_disease_model.h5"):
+    download_file_from_google_drive(model_file_id, 'plant_disease_model.h5')
+
+# Load the trained model
 def load_trained_model():
-    model_file = "plant_disease_model.h5"
-    if not os.path.exists(model_file):
-        model_file_id = "YOUR_MODEL_FILE_ID"  # Replace with your actual model file ID
-        download_file_from_google_drive(model_file_id, model_file)
-    
-    model = load_model(model_file)
-    return model
+    return load_model('plant_disease_model.h5')
 
-# Load the model
 model = load_trained_model()
 
-# Function to preprocess image for prediction
-def prepare_image(image_path):
-    img = cv2.imread(image_path)
-    img = cv2.resize(img, (256, 256))  # Resize to the input size expected by the model
-    img = img_to_array(img)
-    img = np.expand_dims(img, axis=0)  # Add batch dimension
-    img = img / 255.0  # Normalize the image
-    return img
+# Define your labels (mapping for the disease classes)
+labels = ['Corn-Common_rust', 'Potato-Early_blight', 'Tomato-Bacterial_spot']
 
-# Function to predict the disease of the plant
-def predict_disease(img_path):
-    prepared_img = prepare_image(img_path)
-    prediction = model.predict(prepared_img)
-    predicted_class = np.argmax(prediction, axis=1)[0]
-    class_names = ['Corn-Common_rust', 'Potato-Early_blight', 'Tomato-Bacterial_spot']
-    return class_names[predicted_class]
+# Function to prepare the image for prediction
+def prepare_image(img_path):
+    img = Image.open(img_path)
+    img = img.resize((256, 256))  # Resize image to match model input size
+    img_array = np.array(img) / 255.0  # Normalize the image
+    return np.expand_dims(img_array, axis=0)
 
-# Set up Streamlit interface
+# Streamlit app interface
 st.title("Plant Disease Detection")
-st.write("Upload an image of a plant leaf to predict its disease")
 
-uploaded_file = st.file_uploader("Choose a file", type=["jpg", "jpeg", "png"])
+# Upload image for prediction
+uploaded_file = st.file_uploader("Choose an image...", type=["jpg", "png", "jpeg"])
 
 if uploaded_file is not None:
-    # Save the uploaded file temporarily
-    with open("uploaded_image.jpg", "wb") as f:
+    # Prepare the image for prediction
+    image_path = uploaded_file.name
+    with open(image_path, "wb") as f:
         f.write(uploaded_file.getbuffer())
 
-    st.image("uploaded_image.jpg", caption="Uploaded Image", use_column_width=True)
-    
-    # Predict the disease
-    prediction = predict_disease("uploaded_image.jpg")
-    st.write(f"Predicted Disease: {prediction}")
+    # Prepare image
+    prepared_image = prepare_image(image_path)
+
+    # Make prediction
+    prediction = model.predict(prepared_image)
+    predicted_class = np.argmax(prediction)
+
+    # Display prediction
+    st.image(uploaded_file, caption='Uploaded Image.', use_column_width=True)
+    st.write(f'Prediction: {labels[predicted_class]}')
