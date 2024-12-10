@@ -1,6 +1,5 @@
-import numpy as np
 import os
-from os import listdir
+import numpy as np
 from sklearn.model_selection import train_test_split
 from keras.models import Sequential
 from keras.layers import Conv2D, MaxPooling2D, Flatten, Dense
@@ -9,62 +8,47 @@ from keras.utils import to_categorical
 from keras.preprocessing.image import img_to_array
 import cv2
 from PIL import Image
-import gdown
 
-# Data Loading and Preprocessing
-def convert_image_to_array(image_dir):
-    try:
-        image = cv2.imread(image_dir)
-        if image is not None:
-            image = cv2.resize(image, (256, 256))
-            return img_to_array(image)
-        else:
-            return np.array([])  # Empty array in case of error
-    except Exception as e:
-        print(f"Error: {e}")
-        return None
+# Define the function to convert images to arrays
+def convert_image_to_array(image_path):
+    image = cv2.imread(image_path)
+    if image is not None:
+        image = cv2.resize(image, (256, 256))
+        return img_to_array(image)
+    return None
 
-# Download dataset from Google Drive
-def download_data():
-    # Replace with your dataset folder IDs
-    folder_ids = [
-        "1x_6Ksz-FdFcsmnRKnrUEQEv6hEFMiWrb",  # Folder 1 ID
-        "1CSaoJ-iONMXEBPS5J8DBLQUAHa0Ud9xM",  # Folder 2 ID
-        "1LIo8adY1KimV0BNCwVZlqOS-Xz1frVV5",  # Folder 3 ID
-    ]
-    for folder_id in folder_ids:
-        url = f"https://drive.google.com/uc?export=download&id={folder_id}"
-        gdown.download(url, quiet=False)
+# Define your dataset directory
+dataset_dir = r"path_to_your_dataset"  # Replace this with your actual dataset path
 
-# Directory and Labels
-dir = r"your_local_dataset_path"  # Replace with your local dataset path or integrate with gdrive
-root_dir = listdir(dir)
+# Dataset class names
 all_labels = ['Corn-Common_rust', 'Potato-Early_blight', 'Tomato-Bacterial_spot']
 binary_labels = [0, 1, 2]
 
-# Load Data
-image_list, label_list = [], []
-temp = -1
-for directory in root_dir:
-    plant_image_list = listdir(f"{dir}/{directory}")
-    temp += 1
-    for files in plant_image_list:
-        image_path = f"{dir}/{directory}/{files}"
-        image_array = convert_image_to_array(image_path)
-        if image_array is not None:
-            image_list.append(image_array)
-            label_list.append(binary_labels[temp])
+# Loading images and labels
+image_list = []
+label_list = []
 
-# Convert Data to Arrays
-image_list = np.array(image_list, dtype=np.float16) / 255.0  # Normalize pixel values
+for idx, label in enumerate(all_labels):
+    label_dir = os.path.join(dataset_dir, label)
+    for img_name in os.listdir(label_dir):
+        img_path = os.path.join(label_dir, img_name)
+        image = convert_image_to_array(img_path)
+        if image is not None:
+            image_list.append(image)
+            label_list.append(binary_labels[idx])
+
+# Convert to numpy arrays
+image_list = np.array(image_list, dtype=np.float32) / 255.0  # Normalize
 label_list = np.array(label_list)
-x_train, x_test, y_train, y_test = train_test_split(image_list, label_list, test_size=0.2, random_state=10)
 
-# One-Hot Encoding for Labels
+# Split into training and test sets
+x_train, x_test, y_train, y_test = train_test_split(image_list, label_list, test_size=0.2, random_state=42)
+
+# One-hot encode the labels
 y_train = to_categorical(y_train)
 y_test = to_categorical(y_test)
 
-# Build the Model
+# Building the model
 model = Sequential([
     Conv2D(32, (3, 3), padding="same", input_shape=(256, 256, 3), activation="relu"),
     MaxPooling2D(pool_size=(3, 3)),
@@ -72,15 +56,14 @@ model = Sequential([
     MaxPooling2D(pool_size=(2, 2)),
     Flatten(),
     Dense(8, activation="relu"),
-    Dense(3, activation="softmax")  # 3 classes
+    Dense(3, activation="softmax")
 ])
 
-# Compile the Model
+# Compile the model
 model.compile(loss='categorical_crossentropy', optimizer=Adam(0.0001), metrics=['accuracy'])
 
-# Train the Model
-history = model.fit(x_train, y_train, validation_split=0.2, epochs=50, batch_size=128)
+# Train the model
+model.fit(x_train, y_train, validation_data=(x_test, y_test), epochs=50, batch_size=128)
 
-# Save the Model
-model.save('plant_disease_model.h5')  # Save for deployment
-print("Model saved as plant_disease_model.h5")
+# Save the model to disk
+model.save('plant_disease_model.h5')
