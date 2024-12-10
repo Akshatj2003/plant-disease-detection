@@ -1,74 +1,60 @@
 import streamlit as st
 import numpy as np
-import tensorflow as tf
-from tensorflow.keras.models import load_model
-from tensorflow.keras.preprocessing import image
 import os
-import requests
-from io import BytesIO
+import cv2
+from keras.models import load_model
+from keras.preprocessing.image import img_to_array
 from PIL import Image
 import gdown
 
-# Function to download model from Google Drive (if not already present)
-def download_file_from_google_drive(file_id, destination):
-    URL = f'https://drive.google.com/uc?id={file_id}'
-    r = requests.get(URL, stream=True)
-    if r.status_code == 200:
-        with open(destination, 'wb') as f:
-            for chunk in r.iter_content(1024):
-                f.write(chunk)
-    else:
-        print(f"Failed to download file: {r.status_code}")
+# Function to download model from Google Drive
+def download_model():
+    url = 'https://drive.google.com/uc?id=1SKkEKZVZtXGsnGc_-Gk2vpxRDBt2QwHq'  # Replace with the actual model file link
+    output = 'plant_disease_model.h5'
+    gdown.download(url, output, quiet=False)
+    st.write(f"Downloaded model {output}")
 
-# Mount Google Drive if working locally in Colab
-from google.colab import drive
-drive.mount('/content/drive')
+# Function to preprocess and predict image
+def convert_image_to_array(image_file):
+    try:
+        image = Image.open(image_file)
+        image = image.resize((256, 256))
+        image = np.array(image)
+        image = image.astype("float32") / 255.0
+        return np.expand_dims(image, axis=0)
+    except Exception as e:
+        st.error(f"Error in image processing: {e}")
+        return None
 
-# Use Google Drive Path for loading datasets
-dataset_path = '/content/drive/MyDrive/plant-disease-detection'
+# Load model
+@st.cache_resource
+def load_trained_model():
+    download_model()  # This will download the model before loading
+    model = load_model("plant_disease_model.h5")
+    return model
 
-# Replace these with your actual file ids from Google Drive
-model_file_id = 'your_model_file_id_here'
-
-# Download model if not already present in the folder
-if not os.path.exists("plant_disease_model.h5"):
-    download_file_from_google_drive(model_file_id, 'plant_disease_model.h5')
+# Display title and description
+st.title("Plant Disease Detection")
+st.write("This application detects plant diseases using a trained CNN model.")
 
 # Load the trained model
-def load_trained_model():
-    return load_model('plant_disease_model.h5')
-
 model = load_trained_model()
 
-# Define your labels (mapping for the disease classes)
-labels = ['Corn-Common_rust', 'Potato-Early_blight', 'Tomato-Bacterial_spot']
-
-# Function to prepare the image for prediction
-def prepare_image(img_path):
-    img = Image.open(img_path)
-    img = img.resize((256, 256))  # Resize image to match model input size
-    img_array = np.array(img) / 255.0  # Normalize the image
-    return np.expand_dims(img_array, axis=0)
-
-# Streamlit app interface
-st.title("Plant Disease Detection")
-
-# Upload image for prediction
-uploaded_file = st.file_uploader("Choose an image...", type=["jpg", "png", "jpeg"])
+# Upload image through Streamlit's file uploader
+uploaded_file = st.file_uploader("Upload an image of a plant leaf", type=["jpg", "png", "jpeg"])
 
 if uploaded_file is not None:
-    # Prepare the image for prediction
-    image_path = uploaded_file.name
-    with open(image_path, "wb") as f:
-        f.write(uploaded_file.getbuffer())
-
-    # Prepare image
-    prepared_image = prepare_image(image_path)
-
-    # Make prediction
-    prediction = model.predict(prepared_image)
-    predicted_class = np.argmax(prediction)
-
-    # Display prediction
-    st.image(uploaded_file, caption='Uploaded Image.', use_column_width=True)
-    st.write(f'Prediction: {labels[predicted_class]}')
+    st.image(uploaded_file, caption="Uploaded Image", use_column_width=True)
+    st.write("")
+    
+    # Preprocess image and make prediction
+    image_array = convert_image_to_array(uploaded_file)
+    
+    if image_array is not None:
+        prediction = model.predict(image_array)
+        predicted_class = np.argmax(prediction, axis=1)
+        
+        classes = ['Corn-Common_rust', 'Potato-Early_blight', 'Tomato-Bacterial_spot']
+        result = classes[predicted_class[0]]
+        
+        st.success(f"Prediction: {result}")
