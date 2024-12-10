@@ -1,10 +1,9 @@
-numpy
-pandas
-matplotlib
-opencv-python
-Pillow
-scikit-learn
-tensorflow
 streamlit
+tensorflow
 keras
-gdown
+opencv-python
+pillow
+numpy
+h5py
+scikit-learn
+google-colab
