@@ -1,60 +1,58 @@
-import streamlit as st
-import numpy as np
 import os
 import cv2
+import numpy as np
+import gdown
+import streamlit as st
 from keras.models import load_model
 from keras.preprocessing.image import img_to_array
 from PIL import Image
-import gdown
 
-# Function to download model from Google Drive
-def download_model():
-    url = 'https://drive.google.com/uc?id=1SKkEKZVZtXGsnGc_-Gk2vpxRDBt2QwHq'  # Replace with the actual model file link
-    output = 'plant_disease_model.h5'
-    gdown.download(url, output, quiet=False)
-    st.write(f"Downloaded model {output}")
+# Helper function to download files from Google Drive
+def download_file_from_drive(url, output_path):
+    gdown.download(url, output_path, quiet=False)
 
-# Function to preprocess and predict image
-def convert_image_to_array(image_file):
-    try:
-        image = Image.open(image_file)
-        image = image.resize((256, 256))
-        image = np.array(image)
-        image = image.astype("float32") / 255.0
-        return np.expand_dims(image, axis=0)
-    except Exception as e:
-        st.error(f"Error in image processing: {e}")
-        return None
+# Paths for your dataset and model on Google Drive
+model_url = 'YOUR_GOOGLE_DRIVE_MODEL_URL'  # Replace with your actual Google Drive URL for the model
+dataset_url = 'YOUR_GOOGLE_DRIVE_DATASET_URL'  # Replace with your actual Google Drive URL for the dataset
 
-# Load model
-@st.cache_resource
-def load_trained_model():
-    download_model()  # This will download the model before loading
-    model = load_model("plant_disease_model.h5")
-    return model
+# Download the model and dataset if not already available
+if not os.path.exists("plant_disease_model.h5"):
+    download_file_from_drive(model_url, "plant_disease_model.h5")
 
-# Display title and description
+# Load the model
+model = load_model("plant_disease_model.h5")
+
+# Define the function to preprocess the image
+def preprocess_image(image_path):
+    image = cv2.imread(image_path)
+    image = cv2.resize(image, (256, 256))  # Resize image to 256x256
+    image = img_to_array(image)  # Convert image to array
+    image = np.expand_dims(image, axis=0)  # Add batch dimension
+    image = image / 255.0  # Normalize the image
+    return image
+
+# Define the class names based on your dataset
+class_names = ['Corn-Common_rust', 'Potato-Early_blight', 'Tomato-Bacterial_spot']
+
+# Streamlit UI
 st.title("Plant Disease Detection")
-st.write("This application detects plant diseases using a trained CNN model.")
+st.write("Upload an image of a plant to classify its disease.")
 
-# Load the trained model
-model = load_trained_model()
+# Upload image from user
+uploaded_image = st.file_uploader("Choose a plant image...", type=["jpg", "png", "jpeg"])
 
-# Upload image through Streamlit's file uploader
-uploaded_file = st.file_uploader("Upload an image of a plant leaf", type=["jpg", "png", "jpeg"])
-
-if uploaded_file is not None:
-    st.image(uploaded_file, caption="Uploaded Image", use_column_width=True)
-    st.write("")
+if uploaded_image is not None:
+    # Save the uploaded image
+    with open("uploaded_image.jpg", "wb") as f:
+        f.write(uploaded_image.getbuffer())
     
-    # Preprocess image and make prediction
-    image_array = convert_image_to_array(uploaded_file)
+    # Preprocess the image
+    image = preprocess_image("uploaded_image.jpg")
+
+    # Predict the class
+    predictions = model.predict(image)
+    predicted_class = np.argmax(predictions, axis=1)
     
-    if image_array is not None:
-        prediction = model.predict(image_array)
-        predicted_class = np.argmax(prediction, axis=1)
-        
-        classes = ['Corn-Common_rust', 'Potato-Early_blight', 'Tomato-Bacterial_spot']
-        result = classes[predicted_class[0]]
-        
-        st.success(f"Prediction: {result}")
+    # Display the result
+    st.image(uploaded_image, caption="Uploaded Image.", use_column_width=True)
+    st.write(f"Predicted Class: {class_names[predicted_class[0]]}")
