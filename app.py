@@ -1,36 +1,39 @@
 import streamlit as st
-import tensorflow as tf
-from keras.preprocessing import image
 import numpy as np
-import gdown
-import os
+import cv2
+from keras.models import load_model
+from PIL import Image
+import requests
+from io import BytesIO
 
-# Load model from saved file
-@st.cache_resource
-def load_trained_model():
-    return tf.keras.models.load_model("plant_disease_model.h5")
+# Load the trained model and labels
+model = load_model("model/trained_model.h5")
+with open("model/labels.txt", "r") as f:
+    labels = f.read().splitlines()
 
-# Function to make predictions
-def predict_disease(img_path, model):
-    img = image.load_img(img_path, target_size=(256, 256))
-    img_array = image.img_to_array(img) / 255.0  # Normalize image
-    img_array = np.expand_dims(img_array, axis=0)
-    prediction = model.predict(img_array)
-    return prediction
+# Helper function to preprocess the image
+def preprocess_image(image):
+    image = np.array(image)
+    image = cv2.resize(image, (256, 256))
+    image = image / 255.0
+    return np.expand_dims(image, axis=0)
 
-# Streamlit UI
-st.title("Plant Disease Detection")
+# Streamlit app layout
+st.title("Plant Disease Classification")
+st.write("Upload an image to predict the plant disease.")
 
-st.write("Upload an image of a plant leaf to check for disease:")
-
-uploaded_file = st.file_uploader("Choose a file", type=["jpg", "png", "jpeg"])
-
+# File uploader
+uploaded_file = st.file_uploader("Choose an image...", type=["jpg", "jpeg", "png"])
 if uploaded_file is not None:
-    st.image(uploaded_file, caption="Uploaded Image.", use_column_width=True)
-    st.write("")
-    model = load_trained_model()
-    st.write("Classifying... Please wait.")
-    prediction = predict_disease(uploaded_file, model)
-    class_names = ['Corn-Common_rust', 'Potato-Early_blight', 'Tomato-Bacterial_spot']
-    predicted_class = class_names[np.argmax(prediction)]
-    st.write(f"Prediction: {predicted_class}")
+    image = Image.open(uploaded_file)
+    st.image(image, caption="Uploaded Image", use_column_width=True)
+
+    # Preprocess and predict
+    with st.spinner("Classifying..."):
+        processed_image = preprocess_image(image)
+        prediction = model.predict(processed_image)
+        predicted_label = labels[np.argmax(prediction)]
+        confidence = np.max(prediction) * 100
+
+    st.success(f"Prediction: {predicted_label}")
+    st.info(f"Confidence: {confidence:.2f}%")
