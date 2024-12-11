@@ -1,47 +1,48 @@
-import os
-import gdown
+import streamlit as st
+from tensorflow.keras.models import load_model
 import numpy as np
 from PIL import Image
-from tensorflow.keras.models import load_model
-import streamlit as st
+import gdown
+import os
+import cv2
 
-# Download the trained model from Google Drive
+# Function to download the model from Google Drive
 def download_model():
-    model_url = "https://drive.google.com/uc?id=MODEL_DRIVE_ID"  # Replace MODEL_DRIVE_ID with your model file's ID
     model_file = "trained_model.h5"
-
     if not os.path.exists(model_file):
-        print("[INFO] Downloading trained model...")
-        gdown.download(model_url, model_file, quiet=False)
-        if os.path.exists(model_file):
-            print("[INFO] Model downloaded successfully!")
-        else:
-            raise FileNotFoundError("[ERROR] Model download failed!")
-    else:
-        print("[INFO] Model file already exists.")
-
+        url = 'https://drive.google.com/uc?export=download&id=your_model_file_id'
+        gdown.download(url, model_file, quiet=False)
     return model_file
 
-# Load model
+# Load the trained model
 model_path = download_model()
 model = load_model(model_path)
 
+# Class labels
+class_names = ['Corn-Common_rust', 'Potato-Early_blight', 'Tomato-Bacterial_spot']
+
+# Function to preprocess and predict the image
+def preprocess_image(image):
+    img = image.resize((256, 256))
+    img_array = np.array(img)
+    img_array = img_array / 255.0  # Normalize image
+    img_array = np.expand_dims(img_array, axis=0)
+    return img_array
+
 # Streamlit UI
 st.title("Plant Disease Detection")
-st.write("Upload an image to identify the plant disease")
+st.write("Upload a plant leaf image to detect the disease.")
 
-uploaded_file = st.file_uploader("Upload an image", type=["jpg", "jpeg", "png"])
+uploaded_image = st.file_uploader("Choose an image...", type=["jpg", "jpeg", "png"])
 
-if uploaded_file:
-    image = Image.open(uploaded_file)
-    st.image(image, caption="Uploaded Image", use_column_width=True)
-    st.write("Classifying...")
+if uploaded_image is not None:
+    # Display the uploaded image
+    img = Image.open(uploaded_image)
+    st.image(img, caption="Uploaded Image", use_column_width=True)
 
-    # Preprocess the image
-    image = np.array(image.resize((256, 256))) / 255.0
-    image = image.reshape(1, 256, 256, 3)
+    # Preprocess and predict
+    img_array = preprocess_image(img)
+    prediction = model.predict(img_array)
+    predicted_class = class_names[np.argmax(prediction)]
 
-    # Make a prediction
-    prediction = model.predict(image)
-    classes = ["Corn - Common Rust", "Potato - Early Blight", "Tomato - Bacterial Spot"]
-    st.write(f"Prediction: {classes[np.argmax(prediction)]}")
+    st.write(f"Prediction: {predicted_class}")
